@@ -33,17 +33,11 @@ struct Settings: Codable {
     var rayCount: Int = 20
     var lightIntensity: CGFloat = 1.0
 
-    // Audio
+    // Music. Spotify is the only source: nothing plays from disk and nothing
+    // ships in the bundle.
     var volume: Double = 0.75
-    /// Seconds into the track to start each drop. Set this to where the hook lands.
-    var trackStartSeconds: TimeInterval = 0
-
-    // Music source
-    var musicMode: MusicMode = .local
     var spotifyPlaylist: String = ""
     var spotifyShuffle: Bool = true
-    /// How long the local stinger covers for before Spotify has taken over.
-    var spotifyHandoffSeconds: TimeInterval = 1.4
 
     // Interaction
     var hotZonePadding: CGFloat = 8      // grow the notch rect so it's forgiving
@@ -77,11 +71,8 @@ struct Settings: Codable {
         rayCount          = v(.rayCount,          d.rayCount)
         lightIntensity    = v(.lightIntensity,    d.lightIntensity)
         volume            = v(.volume,            d.volume)
-        trackStartSeconds = v(.trackStartSeconds, d.trackStartSeconds)
-        musicMode         = v(.musicMode,         d.musicMode)
         spotifyPlaylist   = v(.spotifyPlaylist,   d.spotifyPlaylist)
         spotifyShuffle    = v(.spotifyShuffle,    d.spotifyShuffle)
-        spotifyHandoffSeconds = v(.spotifyHandoffSeconds, d.spotifyHandoffSeconds)
         hotZonePadding    = v(.hotZonePadding,    d.hotZonePadding)
         exitDelay         = v(.exitDelay,         d.exitDelay)
         pollHz            = v(.pollHz,            d.pollHz)

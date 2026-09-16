@@ -6,23 +6,27 @@ import Foundation
 /// Every call runs on a background queue — NSAppleScript blocks its thread, and a
 /// blocked main thread would stutter the animation mid-drop.
 ///
-/// Triggers a one-time Automation permission prompt the first time it runs, which
-/// is why Spotify is opt-in rather than the default.
-final class SpotifyMusicSource: MusicSource {
+/// Triggers a one-time Automation permission prompt the first time it runs. The
+/// app declares `NSAppleEventsUsageDescription`; without that key macOS refuses
+/// the events silently, with no prompt ever shown.
+final class SpotifyMusicSource {
 
     private let queue = DispatchQueue(label: "life.keithjoseph.DiscoBreak.spotify")
     private let playlistURI: String?
     private let shuffle: Bool
+    private let volume: Int
 
     private var priorTrack: String?
     private var priorPosition: Double = 0
+    private var priorVolume = 90
     private var wasPlaying = false
 
     private(set) var nowPlaying: String?
 
-    init(playlistURL: String, shuffle: Bool = true) {
+    init(playlistURL: String, shuffle: Bool = true, volume: Double = 0.75) {
         self.playlistURI = Self.parsePlaylistURI(from: playlistURL)
         self.shuffle = shuffle
+        self.volume = max(0, min(100, Int(volume * 100)))
         if playlistURI == nil && !playlistURL.isEmpty {
             NSLog("DiscoBreak: could not parse a playlist id out of %@", playlistURL)
         }
@@ -56,42 +60,52 @@ final class SpotifyMusicSource: MusicSource {
 
     // MARK: - MusicSource
 
-    func start(fadeIn: TimeInterval) {
+    func start() {
         guard let uri = playlistURI else { return }
         queue.async { [weak self] in
             guard let self else { return }
             self.rememberCurrentPlayback()
 
-            // Ramp from silence so the handover from the local stinger is inaudible.
-            _ = Self.run("tell application \"Spotify\" to set sound volume to 0")
+            // Straight in at full volume. There is no local stinger to hand over
+            // from any more, so anything done before the music starts is just more
+            // silence — and every one of these lines costs a round trip.
+            Self.perform("tell application \"Spotify\" to set sound volume to \(self.volume)")
             if self.shuffle {
-                _ = Self.run("tell application \"Spotify\" to set shuffling to true")
+                Self.perform("tell application \"Spotify\" to set shuffling to true")
             }
 
             // `play track` takes a context URI in current Spotify builds. If that
-            // ever stops working, opening the URI and hitting play does the same job.
-            let played = Self.run("tell application \"Spotify\" to play track \"\(uri)\"")
-            if played == nil {
-                NSWorkspace.shared.open(URL(string: uri)!)
+            // ever stops working, handing the URI to Spotify and hitting play does
+            // the same job.
+            if !Self.perform("tell application \"Spotify\" to play track \"\(uri)\"") {
+                Self.openInSpotify(uri)
                 Thread.sleep(forTimeInterval: 0.6)
-                _ = Self.run("tell application \"Spotify\" to play")
+                Self.perform("tell application \"Spotify\" to play")
             }
             if self.shuffle {
-                _ = Self.run("tell application \"Spotify\" to set shuffling to true")
+                Self.perform("tell application \"Spotify\" to set shuffling to true")
             }
 
-            self.rampVolume(to: 90, over: fadeIn)
             self.refreshNowPlaying()
         }
     }
 
-    func stop(fadeOut: TimeInterval) {
+    func stop() {
         queue.async { [weak self] in
             guard let self else { return }
-            self.rampVolume(to: 0, over: fadeOut)
-            _ = Self.run("tell application \"Spotify\" to pause")
+            self.fadeOut()
+            Self.perform("tell application \"Spotify\" to pause")
             self.restorePriorPlayback()
             DispatchQueue.main.async { self.nowPlaying = nil }
+        }
+    }
+
+    /// Four steps, not forty. Every step is an AppleScript round trip, and a fade
+    /// that outlasts the ball's retract is worse than a clean cut.
+    private func fadeOut() {
+        for i in stride(from: 3, through: 0, by: -1) {
+            Self.perform("tell application \"Spotify\" to set sound volume to \(volume * i / 4)")
+            Thread.sleep(forTimeInterval: 0.05)
         }
     }
 
@@ -100,6 +114,7 @@ final class SpotifyMusicSource: MusicSource {
     // Never leave someone's music in a state they didn't choose.
 
     private func rememberCurrentPlayback() {
+        priorVolume = Int(Self.run("tell application \"Spotify\" to return sound volume as text") ?? "") ?? volume
         guard let state = Self.run("tell application \"Spotify\" to return player state as text") else { return }
         wasPlaying = state.contains("playing")
         guard wasPlaying else { return }
@@ -108,11 +123,13 @@ final class SpotifyMusicSource: MusicSource {
     }
 
     private func restorePriorPlayback() {
+        // The volume goes back whether or not anything was playing — we changed it
+        // either way, and leaving it moved is the rudest thing this app could do.
+        Self.perform("tell application \"Spotify\" to set sound volume to \(priorVolume)")
         guard wasPlaying, let track = priorTrack else { return }
-        _ = Self.run("tell application \"Spotify\" to play track \"\(track)\"")
-        _ = Self.run("tell application \"Spotify\" to set player position to \(priorPosition)")
-        _ = Self.run("tell application \"Spotify\" to pause")
-        _ = Self.run("tell application \"Spotify\" to set sound volume to 90")
+        Self.perform("tell application \"Spotify\" to play track \"\(track)\"")
+        Self.perform("tell application \"Spotify\" to set player position to \(priorPosition)")
+        Self.perform("tell application \"Spotify\" to pause")
         wasPlaying = false
         priorTrack = nil
     }
@@ -124,26 +141,39 @@ final class SpotifyMusicSource: MusicSource {
         DispatchQueue.main.async { [weak self] in self?.nowPlaying = text.isEmpty ? nil : text }
     }
 
-    /// Spotify's volume is an integer 0-100, so a fade is a short series of steps.
-    private func rampVolume(to target: Int, over seconds: TimeInterval) {
-        let steps = max(1, Int(seconds / 0.05))
-        let current = Int(Self.run("tell application \"Spotify\" to return sound volume as text") ?? "") ?? 0
-        for i in 1...steps {
-            let v = current + (target - current) * i / steps
-            _ = Self.run("tell application \"Spotify\" to set sound volume to \(v)")
-            Thread.sleep(forTimeInterval: 0.05)
-        }
+    /// Hands the URI to Spotify itself rather than to whatever app happens to own
+    /// the `spotify:` scheme. On a Mac where that is the browser, the default
+    /// handler opens the web player, which then takes playback off the desktop app
+    /// — the playlist stops rather than starts.
+    private static func openInSpotify(_ uri: String) {
+        guard let url = URL(string: uri),
+              let app = NSWorkspace.shared
+                .urlForApplication(withBundleIdentifier: "com.spotify.client") else { return }
+        NSWorkspace.shared.open([url], withApplicationAt: app,
+                                configuration: NSWorkspace.OpenConfiguration())
     }
 
-    @discardableResult
-    private static func run(_ source: String) -> String? {
+    // MARK: - AppleScript
+
+    /// Value and success are two different questions, and conflating them is what
+    /// stopped playlists starting: `play track` succeeds and returns nothing, which
+    /// is indistinguishable from a failure if all you look at is the value. Most of
+    /// Spotify's commands return nothing.
+    private static func execute(_ source: String) -> (ok: Bool, value: String?) {
         var error: NSDictionary?
-        guard let script = NSAppleScript(source: source) else { return nil }
+        guard let script = NSAppleScript(source: source) else { return (false, nil) }
         let result = script.executeAndReturnError(&error)
         if let error {
             NSLog("DiscoBreak spotify: %@", error.description)
-            return nil
+            return (false, nil)
         }
-        return result.stringValue
+        return (true, result.stringValue)
     }
+
+    /// For commands that answer something.
+    private static func run(_ source: String) -> String? { execute(source).value }
+
+    /// For commands that just do something.
+    @discardableResult
+    private static func perform(_ source: String) -> Bool { execute(source).ok }
 }

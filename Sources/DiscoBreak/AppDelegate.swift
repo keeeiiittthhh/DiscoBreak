@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)      // no Dock icon
 
         show = ShowController(settings: store.settings)
+        installEditMenu()
         installStatusItem()
         restartDetector()
 
@@ -59,6 +60,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Menu bar
+
+    /// An app with no Dock icon gets no menu bar either — and macOS delivers
+    /// Command-V by looking it up in the app's Edit menu. With no menu there was
+    /// nothing to look it up in, so pasting a playlist link into Settings did
+    /// nothing at all. This menu is never drawn anywhere; it exists so that the
+    /// standard editing shortcuts resolve.
+    ///
+    /// Selectors are written out by name on purpose: they are dispatched down the
+    /// responder chain to whatever text field is focused, so there is no concrete
+    /// type here to take #selector of.
+    private func installEditMenu() {
+        let edit = NSMenu(title: "Edit")
+        func add(_ title: String, _ selector: String, _ key: String,
+                 _ modifiers: NSEvent.ModifierFlags = .command) {
+            let item = NSMenuItem(title: title, action: Selector((selector)), keyEquivalent: key)
+            item.keyEquivalentModifierMask = modifiers
+            edit.addItem(item)
+        }
+        add("Undo", "undo:", "z")
+        add("Redo", "redo:", "Z", [.command, .shift])
+        edit.addItem(.separator())
+        add("Cut", "cut:", "x")
+        add("Copy", "copy:", "c")
+        add("Paste", "paste:", "v")
+        add("Select All", "selectAll:", "a")
+
+        let editItem = NSMenuItem()
+        editItem.submenu = edit
+
+        let main = NSMenu()
+        main.addItem(editItem)
+        NSApp.mainMenu = main
+    }
 
     private func installStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

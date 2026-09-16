@@ -112,32 +112,19 @@ private struct MusicTab: View {
     @ObservedObject var store: SettingsStore
     var body: some View {
         Form {
-            Picker("Source", selection: $store.settings.musicMode) {
-                ForEach(MusicMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.radioGroup)
-
-            if store.settings.musicMode == .spotify {
-                TextField("Playlist link", text: $store.settings.spotifyPlaylist,
-                          prompt: Text("https://open.spotify.com/playlist/..."))
-                Toggle("Shuffle", isOn: $store.settings.spotifyShuffle)
-                Text(SpotifyMusicSource.isInstalled
-                     ? "The local file plays instantly and Spotify fades in underneath it, so you never hear the gap."
-                     : "Spotify does not appear to be installed.")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
-                Row("Start at", detail: "Seconds into the track. Skip the intro, land on the hook.") {
-                    TextField("", value: $store.settings.trackStartSeconds, format: .number)
-                        .frame(width: 60)
-                }
-                Text("Drop any audio file into the DiscoBreak folder in Application Support.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            TextField("Playlist link", text: $store.settings.spotifyPlaylist,
+                      prompt: Text("https://open.spotify.com/playlist/..."))
+            Toggle("Shuffle", isOn: $store.settings.spotifyShuffle)
 
             Row("Volume") {
                 Slider(value: $store.settings.volume, in: 0...1)
                 Text("\(Int(store.settings.volume * 100))%").monospacedDigit().frame(width: 46)
             }
+
+            Text(SpotifyMusicSource.isInstalled
+                 ? "The ball starts this playlist and puts back whatever you were listening to when it retracts. macOS asks once whether DiscoBreak may control Spotify."
+                 : "Spotify does not appear to be installed, so the show runs silent.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         .padding(20)
     }

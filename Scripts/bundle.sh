@@ -18,7 +18,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/DiscoBreak"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 
-# Copy any non-plist resources (audio loop, icon) alongside the binary.
+# Copy any non-plist resources (icon, menu bar glyph) alongside the binary.
 shopt -s nullglob
 for f in "$ROOT"/Resources/*; do
   [[ "$(basename "$f")" == "Info.plist" ]] && continue

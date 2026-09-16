@@ -19,7 +19,9 @@ final class ShowController {
     }
 
     private var settings: Settings
-    private var audio: MusicDirector
+    /// Nil until a playlist is set. With no local fallback left, no playlist
+    /// simply means a silent show.
+    private var audio: SpotifyMusicSource?
 
     private var stages: [Stage] = []
     private var state: State = .idle
@@ -27,7 +29,14 @@ final class ShowController {
 
     init(settings: Settings) {
         self.settings = settings
-        self.audio = MusicDirector(settings: settings)
+        self.audio = Self.makeAudio(settings)
+    }
+
+    private static func makeAudio(_ settings: Settings) -> SpotifyMusicSource? {
+        guard !settings.spotifyPlaylist.isEmpty else { return nil }
+        return SpotifyMusicSource(playlistURL: settings.spotifyPlaylist,
+                                  shuffle: settings.spotifyShuffle,
+                                  volume: settings.volume)
     }
 
     /// Applied live from the settings window. Rebuilding is cheap — a few hundred
@@ -35,10 +44,10 @@ final class ShowController {
     func apply(_ newSettings: Settings) {
         settings = newSettings
         hardReset()
-        audio = MusicDirector(settings: newSettings)
+        audio = Self.makeAudio(newSettings)
     }
 
-    var nowPlaying: String? { audio.nowPlaying }
+    var nowPlaying: String? { audio?.nowPlaying }
 
     // MARK: - Input
 
@@ -53,7 +62,7 @@ final class ShowController {
             ensureStages()
             state = .dropping
             stages.forEach { $0.renderer.drop() }
-            audio.start()
+            audio?.start()
             // The spring is still settling, but the show is live from here on.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self, self.state == .dropping else { return }
@@ -65,7 +74,7 @@ final class ShowController {
     func pointerLeftNotch() {
         guard state == .dropping || state == .playing else { return }
         state = .retracting
-        audio.stop()
+        audio?.stop()
 
         // Secondary stages fade on their own clock; the primary one owns the
         // state change, so a two-display setup settles exactly like a one-display one.
@@ -136,7 +145,7 @@ final class ShowController {
     /// next hover rebuilds against the new screen list.
     func hardReset() {
         teardownWork?.cancel()
-        audio.stop()
+        audio?.stop()
         teardownStages()
         state = .idle
     }
