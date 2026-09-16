@@ -1,11 +1,21 @@
 import CoreGraphics
 import Foundation
 
+/// Which ball hangs on the chain. Both throw the same physics-driven light field;
+/// they differ in how the sphere itself is drawn.
+enum BallStyle: String, Codable, CaseIterable {
+    /// Painted disc: one circle, a facet grid scrolling across it, edge shading.
+    case classic = "Classic"
+    /// Several hundred square mirrors arranged on a real sphere, turning in 3D.
+    case mirror = "Mirror tiles"
+}
+
 /// Tunables. Defaults are baked in; drop a JSON file at
 /// ~/Library/Application Support/DiscoBreak/settings.json to override any subset.
 struct Settings: Codable {
 
     // Geometry
+    var ballStyle: BallStyle = .mirror
     var ballDiameter: CGFloat = 116
     var dropDistance: CGFloat = 230      // ball centre, in points below the notch
 
@@ -55,6 +65,7 @@ struct Settings: Codable {
         func v<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
             (try? c.decodeIfPresent(T.self, forKey: key)) .flatMap { $0 } ?? fallback
         }
+        ballStyle         = v(.ballStyle,         d.ballStyle)
         ballDiameter      = v(.ballDiameter,      d.ballDiameter)
         dropDistance      = v(.dropDistance,      d.dropDistance)
         rotationSeconds   = v(.rotationSeconds,   d.rotationSeconds)

@@ -151,6 +151,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pause = add(menu, "Pause DiscoBreak", #selector(togglePause), "p")
         pause.tag = 2
         menu.addItem(.separator())
+
+        // Two balls, one click apart. The checkmark shows which is hanging.
+        let ball = NSMenuItem(title: "Ball", action: nil, keyEquivalent: "")
+        let ballMenu = NSMenu()
+        for style in BallStyle.allCases {
+            let item = NSMenuItem(title: style.rawValue, action: #selector(chooseBall(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = style.rawValue
+            ballMenu.addItem(item)
+        }
+        ball.submenu = ballMenu
+        ball.tag = 3
+        menu.addItem(ball)
+        menu.addItem(.separator())
         add(menu, "Settings…", #selector(openSettings), ",")
         menu.addItem(.separator())
         add(menu, "Quit DiscoBreak", #selector(quit), "q")
@@ -179,6 +194,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if isPaused { show.pointerLeftNotch() }
     }
 
+    @objc private func chooseBall(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let style = BallStyle(rawValue: raw),
+              style != store.settings.ballStyle else { return }
+        store.settings.ballStyle = style      // saves, and rebuilds the show
+    }
+
     @objc private func openSettings() {
         windows.showSettings(store: store) { [weak self] in self?.testDrop() }
     }
@@ -191,5 +213,9 @@ extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.item(withTag: 1)?.title = show.nowPlaying.map { "♫  \($0)" } ?? "Hover the notch to start"
         menu.item(withTag: 2)?.title = isPaused ? "Resume DiscoBreak" : "Pause DiscoBreak"
+        for item in menu.item(withTag: 3)?.submenu?.items ?? [] {
+            item.state = item.representedObject as? String == store.settings.ballStyle.rawValue
+                ? .on : .off
+        }
     }
 }

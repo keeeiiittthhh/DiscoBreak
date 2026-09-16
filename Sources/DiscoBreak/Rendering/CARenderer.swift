@@ -26,7 +26,10 @@ final class CARenderer: DiscoRenderer {
     private var spots: CALayer?
     private var rays: CALayer?
     private var chain: CAShapeLayer?
+    /// Whichever layer carries the turn: the classic ball's scrolling facet grid,
+    /// or the 3D ball's transform layer. Exactly one of these is ever set.
     private var facets: CALayer?
+    private var spinner: CALayer?
 
     private var solver = ReflectionSolver()
     private var spotPool: [CALayer] = []
@@ -101,7 +104,9 @@ final class CARenderer: DiscoRenderer {
         rig.addSublayer(spots)
 
         // --- the ball itself ---------------------------------------------
-        let ball = makeBall(radius: radius)
+        let ball = settings.ballStyle == .mirror
+            ? MirrorBall3D.make(radius: radius)
+            : makeBall(radius: radius)
         ball.position = ballCentre
         if role == .full { rig.addSublayer(ball) }
 
@@ -112,9 +117,13 @@ final class CARenderer: DiscoRenderer {
         self.spots = spots
         self.rays = rays
         self.chain = chain
-        self.facets = role == .full
-            ? ball.sublayers?.first?.sublayers?.first(where: { $0.name == "facets" })
-            : nil
+        guard role == .full else { return }
+        switch settings.ballStyle {
+        case .classic:
+            facets = ball.sublayers?.first?.sublayers?.first(where: { $0.name == "facets" })
+        case .mirror:
+            spinner = ball.sublayers?.first(where: { $0.name == MirrorBall3D.spinnerName })
+        }
     }
 
     func detach() {
@@ -122,7 +131,8 @@ final class CARenderer: DiscoRenderer {
         rig?.removeFromSuperlayer()
         solverTimer?.invalidate(); solverTimer = nil
         spotPool.removeAll()
-        rig = nil; ball = nil; spots = nil; rays = nil; chain = nil; facets = nil
+        rig = nil; ball = nil; spots = nil; rays = nil; chain = nil
+        facets = nil; spinner = nil
     }
 
     // MARK: - Show control
@@ -204,6 +214,7 @@ final class CARenderer: DiscoRenderer {
 
     private func startPerpetualMotion() {
         scrollFacets()
+        turnBall()
         startSolverLoop()
         spin(rays, seconds: settings.rotationSeconds, clockwise: false, key: "orbit")
 
@@ -223,7 +234,8 @@ final class CARenderer: DiscoRenderer {
     private func stopPerpetualMotion() {
         solverTimer?.invalidate()
         solverTimer = nil
-        [spots, rays, facets].forEach { $0?.removeAllAnimations() }
+        [spots, rays, facets, spinner].forEach { $0?.removeAllAnimations() }
+        if let spinner { MirrorBall3D.stopTwinkle(on: spinner) }
         rig?.removeAnimation(forKey: "sway")
     }
 
@@ -292,6 +304,26 @@ final class CARenderer: DiscoRenderer {
         a.repeatCount = .infinity
         a.isRemovedOnCompletion = false
         facets.add(a, forKey: "scroll")
+    }
+
+    /// The 3D ball turns for real: one rotation about the vertical axis, run by the
+    /// render server. `beginTime` is pinned to the same shared clock the solver
+    /// reads, so the sphere you can see and the light it throws agree on where it is.
+    private func turnBall() {
+        guard let spinner else { return }
+        MirrorBall3D.startTwinkle(on: spinner)
+        guard spinner.animation(forKey: "turn") == nil else { return }
+
+        let period = max(1.0, settings.rotationSeconds)
+        let a = CABasicAnimation(keyPath: "transform.rotation.y")
+        a.fromValue = 0
+        a.toValue = Double.pi * 2
+        a.duration = period
+        a.repeatCount = .infinity
+        a.isRemovedOnCompletion = false
+        let now = CACurrentMediaTime()
+        a.beginTime = now - now.truncatingRemainder(dividingBy: period)
+        spinner.add(a, forKey: "turn")
     }
 
     private func spin(_ layer: CALayer?, seconds: Double, clockwise: Bool, key: String) {

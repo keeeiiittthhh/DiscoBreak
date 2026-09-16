@@ -44,6 +44,21 @@ rather than the frantic spin most fakes use.
 
 See [`ReflectionSolver.swift`](Sources/DiscoBreak/Rendering/ReflectionSolver.swift).
 
+## Two balls
+
+Settings → Look, or the menu bar icon → Ball. Both throw the same light field;
+they differ in how the sphere itself is drawn.
+
+- **Mirror tiles** (default) — several hundred square mirrors placed on a real
+  sphere and turned in 3D by a `CATransformLayer`. Tiles go round the back and
+  cull themselves; the silhouette squashes them. One hardware animation, no
+  per-frame CPU. Geometry follows Bojan's
+  [CSS 3D Disco Ball](https://codepen.io/bojan-c/pen/VxbLmX).
+- **Classic** — a painted disc with a facet grid scrolling across it. Fewer
+  layers, and what shipped in v1.
+
+See [`MirrorBall3D.swift`](Sources/DiscoBreak/Rendering/MirrorBall3D.swift).
+
 ## Music
 
 **Local file (default).** Ships with an original 120 BPM loop. Drop any audio
@@ -65,7 +80,7 @@ are fine — anything you leave out keeps its default. Sliders apply live.
 
 | Tab | Controls |
 |---|---|
-| Look | ball size, drop distance, light intensity, spot count, spread |
+| Look | ball style, ball size, drop distance, light intensity, spot count, spread |
 | Motion | rotation speed, frame rate, drop bounce and speed |
 | Music | source, playlist, start offset, volume |
 | Behaviour | launch at login, multi-display, hot zone padding, exit delay |

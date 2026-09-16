@@ -38,6 +38,16 @@ enum EnergyBudget {
         return max(12, n)
     }
 
+    /// Latitude rings on the 3D ball. Every ring dropped removes a few dozen tile
+    /// layers, so this is the cheapest dial on that ball by a distance.
+    static func ballRings(_ requested: Double) -> Double {
+        switch level {
+        case .full:    return requested
+        case .reduced: return max(9, requested * 0.7)
+        case .minimal: return max(7, requested * 0.5)
+        }
+    }
+
     static var describedLevel: String {
         switch level {
         case .full:    return "full"

@@ -48,6 +48,15 @@ private struct LookTab: View {
     @ObservedObject var store: SettingsStore
     var body: some View {
         Form {
+            Picker("Ball", selection: $store.settings.ballStyle) {
+                ForEach(BallStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text(store.settings.ballStyle == .mirror
+                 ? "Several hundred real mirrors on a sphere, turning in 3D."
+                 : "A painted disc with a facet grid scrolling across it. Cheaper.")
+                .font(.caption).foregroundStyle(.secondary)
+
             Row("Ball size") {
                 Slider(value: $store.settings.ballDiameter, in: 60...260)
                 Text("\(Int(store.settings.ballDiameter))pt").monospacedDigit().frame(width: 46)
