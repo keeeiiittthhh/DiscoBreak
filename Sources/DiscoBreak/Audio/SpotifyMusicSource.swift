@@ -20,6 +20,10 @@ final class SpotifyMusicSource {
     private var priorPosition: Double = 0
     private var priorVolume = 90
     private var wasPlaying = false
+    /// True once the playlist is loaded into Spotify. After that a drop is a plain
+    /// `play`, which — unlike `play track` — does not pull Spotify to the front,
+    /// and picks up where the music left off instead of restarting it.
+    private var contextLoaded = false
 
     private(set) var nowPlaying: String?
 
@@ -65,6 +69,9 @@ final class SpotifyMusicSource {
             NSLog("DiscoBreak spotify: no playlist set — running silent")
             return
         }
+        // Read on the main thread, before anything can move it.
+        let front = NSWorkspace.shared.frontmostApplication
+
         queue.async { [weak self] in
             guard let self, Self.wakeQuietly() else { return }
             self.rememberCurrentPlayback()
@@ -77,17 +84,27 @@ final class SpotifyMusicSource {
                 Self.perform("tell application \"Spotify\" to set shuffling to true")
             }
 
-            // `play track` takes a context URI in current Spotify builds. If that
-            // ever stops working, handing the URI to Spotify and hitting play does
-            // the same job.
-            if !Self.perform("tell application \"Spotify\" to play track \"\(uri)\"") {
-                NSLog("DiscoBreak spotify: play track refused — handing the link over instead")
-                Self.openInSpotify(uri)
-                Thread.sleep(forTimeInterval: 0.6)
+            if self.contextLoaded {
                 Self.perform("tell application \"Spotify\" to play")
-            }
-            if self.shuffle {
-                Self.perform("tell application \"Spotify\" to set shuffling to true")
+            } else {
+                // `play track` is the one command that brings Spotify to the front:
+                // it navigates the window to the playlist. Worth paying once to load
+                // it — but not worth taking someone out of what they were doing, so
+                // the focus goes back straight afterwards.
+                //
+                // If it is ever refused, handing the URI to Spotify does the same
+                // job. That path exists because the default handler for `spotify:`
+                // links can be the browser, and the web player would take playback
+                // off the desktop app entirely.
+                if Self.perform("tell application \"Spotify\" to play track \"\(uri)\"") {
+                    self.contextLoaded = true
+                } else {
+                    NSLog("DiscoBreak spotify: play track refused — handing the link over instead")
+                    Self.openInSpotify(uri)
+                    Thread.sleep(forTimeInterval: 0.6)
+                    Self.perform("tell application \"Spotify\" to play")
+                }
+                Self.restoreFocus(to: front)
             }
 
             self.refreshNowPlaying()
@@ -131,6 +148,9 @@ final class SpotifyMusicSource {
         // either way, and leaving it moved is the rudest thing this app could do.
         Self.perform("tell application \"Spotify\" to set sound volume to \(priorVolume)")
         guard wasPlaying, let track = priorTrack else { return }
+        // Putting their track back also puts the playlist away, so the next drop
+        // has to load it again rather than resuming whatever is now cued up.
+        contextLoaded = false
         Self.perform("tell application \"Spotify\" to play track \"\(track)\"")
         Self.perform("tell application \"Spotify\" to set player position to \(priorPosition)")
         Self.perform("tell application \"Spotify\" to pause")
@@ -184,6 +204,20 @@ final class SpotifyMusicSource {
               let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
         else { return }
         NSWorkspace.shared.open([url], withApplicationAt: app, configuration: quietly())
+    }
+
+    /// Spotify comes forward about half a second after `play track`. Hand the
+    /// focus back once it has, and check again a beat later in case it was slow.
+    private static func restoreFocus(to app: NSRunningApplication?) {
+        guard let app, app.bundleIdentifier != bundleID else { return }
+        for delay in [0.5, 1.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard !app.isTerminated,
+                      NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID
+                else { return }
+                app.activate()
+            }
+        }
     }
 
     private static func quietly() -> NSWorkspace.OpenConfiguration {
