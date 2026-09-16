@@ -57,7 +57,12 @@ enum MirrorBall3D {
 
         var lat = fuzzy
         while lat < .pi {
-            let z = r * CGFloat(cos(lat))
+            // Latitude runs down the vertical axis, so the rings stack like the
+            // bands on a real ball. (The reference pen builds its rings around the
+            // axis pointing at the viewer and tips the whole sphere 90 degrees
+            // afterwards; doing it here instead means the spin is a plain turn
+            // about y, matching the axis the reflection solver already uses.)
+            let y = r * CGFloat(cos(lat))
             // Deliberately under-filled: a ring packed to its exact circumference
             // looks crowded, and the gaps let the dark core read as grout.
             let ringRadius = 0.8 * r * CGFloat(sin(lat))
@@ -69,7 +74,7 @@ enum MirrorBall3D {
             var lon = angleStep / 2 + fuzzy
             while lon < 2 * .pi {
                 let x = r * CGFloat(cos(lon) * sin(lat))
-                let y = r * CGFloat(sin(lon) * sin(lat))
+                let z = r * CGFloat(sin(lon) * sin(lat))
 
                 let f = CALayer()
                 f.bounds = CGRect(x: 0, y: 0, width: size - 0.7, height: size - 0.7)
@@ -77,10 +82,12 @@ enum MirrorBall3D {
                 f.isDoubleSided = false      // the back of the ball culls itself
                 f.backgroundColor = mirror(bright: equator, &rng)
 
-                // Move out to the sphere, then turn the tile flat against it.
+                // Move out to the sphere, then turn the tile flat against it:
+                // these two angles are exactly the pair that takes a tile's own
+                // facing direction onto the outward normal at this point.
                 var m = CATransform3DMakeTranslation(x, y, z)
-                m = CATransform3DRotate(m, CGFloat(lon), 0, 0, 1)
-                m = CATransform3DRotate(m, CGFloat(lat), 0, 1, 0)
+                m = CATransform3DRotate(m, CGFloat(Double.pi / 2 - lon), 0, 1, 0)
+                m = CATransform3DRotate(m, CGFloat(lat - Double.pi / 2), 1, 0, 0)
                 f.transform = m
 
                 out.append(f)
