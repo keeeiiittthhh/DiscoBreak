@@ -53,7 +53,7 @@ private struct OnboardingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                Image(nsImage: MenuBarIcon.make(size: 34))
+                Image(nsImage: MenuBarIcon.make(height: 34))
                 VStack(alignment: .leading) {
                     Text("DiscoBreak").font(.title2).bold()
                     Text("A five second party, on demand.").foregroundStyle(.secondary)

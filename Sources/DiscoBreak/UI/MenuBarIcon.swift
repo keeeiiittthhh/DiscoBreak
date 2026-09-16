@@ -8,17 +8,25 @@ enum MenuBarIcon {
 
     /// The shipped glyph, designed in Figma and exported as SVG. `NSImage` renders
     /// SVG as a vector rep, so it stays crisp at any menu bar size and on any display.
-    static func make(size: CGFloat = 18) -> NSImage {
-        if let image = artwork(size: size) { return image }
+    ///
+    /// 19pt inside a 22pt menu bar: as large as the glyph can go while keeping a
+    /// hair of breathing room above and below, matching the system's own items.
+    /// The asset's viewBox is cropped to the artwork itself, so this height is the
+    /// height of the ball rather than of some empty frame around it.
+    static func make(height: CGFloat = 19) -> NSImage {
+        if let image = artwork(height: height) { return image }
         NSLog("DiscoBreak: menubar-icon.svg missing — using the drawn fallback glyph")
-        return drawn(size: size)
+        return drawn(size: height)
     }
 
-    private static func artwork(size: CGFloat) -> NSImage? {
+    private static func artwork(height: CGFloat) -> NSImage? {
         let url = Bundle.main.bundleURL
             .appendingPathComponent("Contents/Resources/menubar-icon.svg")
-        guard let image = NSImage(contentsOf: url) else { return nil }
-        image.size = NSSize(width: size, height: size)
+        guard let image = NSImage(contentsOf: url), image.size.height > 0 else { return nil }
+        // The glyph is wider than it is tall (the sparkles sit off to one side),
+        // so scale by height and let the width follow. Status items are variable width.
+        let aspect = image.size.width / image.size.height
+        image.size = NSSize(width: (height * aspect).rounded(), height: height)
         image.isTemplate = true          // macOS tints it: dark on light bars, light on dark
         return image
     }
