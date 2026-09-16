@@ -51,11 +51,13 @@ they differ in how the sphere itself is drawn.
 
 - **Mirror tiles** (default) — several hundred square mirrors placed on a real
   sphere and turned in 3D by a `CATransformLayer`. Tiles go round the back and
-  cull themselves; the silhouette squashes them. One hardware animation, no
-  per-frame CPU. Geometry follows Bojan's
+  cull themselves; the silhouette squashes them. The turn is one hardware
+  animation and a sixth of the mirrors twinkle on their own; no per-frame CPU
+  either way. Geometry follows Bojan's
   [CSS 3D Disco Ball](https://codepen.io/bojan-c/pen/VxbLmX).
-- **Classic** — a painted disc with a facet grid scrolling across it. Fewer
-  layers, and what shipped in v1.
+- **Classic** — a painted disc with a facet grid scrolling across it. More
+  layers than the 3D ball, but flat and on one animation, so it is the cheaper
+  of the two. What shipped in v1.
 
 See [`MirrorBall3D.swift`](Sources/DiscoBreak/Rendering/MirrorBall3D.swift).
 
@@ -76,7 +78,10 @@ Spotify Premium recommended; nothing here handles ad breaks.
 
 Menu bar icon → Settings…, or edit
 `~/Library/Application Support/DiscoBreak/settings.json` directly. Partial files
-are fine — anything you leave out keeps its default. Sliders apply live.
+are fine — anything you leave out keeps its default, and so does anything it
+cannot read. Values are the ones the settings window shows, spelling and
+capitals included: `"ballStyle"` takes `"Mirror tiles"` or `"Classic"`,
+`"musicMode"` takes `"Local file"` or `"Spotify playlist"`. Sliders apply live.
 
 | Tab | Controls |
 |---|---|

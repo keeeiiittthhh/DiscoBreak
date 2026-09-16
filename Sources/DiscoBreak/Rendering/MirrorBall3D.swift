@@ -48,9 +48,9 @@ enum MirrorBall3D {
 
     private static func tiles(radius r: CGFloat) -> [CALayer] {
         let size = max(4, r * 0.13)          // same tile-to-ball ratio as the reference
-        let rings = EnergyBudget.ballRings(19.55)
+        let rings = EnergyBudget.ballRings(20)
         let fuzzy = 0.001
-        let step = (Double.pi - fuzzy) / rings
+        let step = (Double.pi - fuzzy) / Double(rings)
 
         var out: [CALayer] = []
         var rng = SystemRandomNumberGenerator()
@@ -153,10 +153,13 @@ enum MirrorBall3D {
     static func startTwinkle(on spinner: CALayer) {
         guard EnergyBudget.level == .full else { return }
         guard let tiles = spinner.sublayers,
-              tiles.first?.animation(forKey: "twinkle") == nil else { return }
+              spinner.value(forKey: twinklingKey) == nil else { return }
+        spinner.setValue(true, forKey: twinklingKey)
 
         var rng = SystemRandomNumberGenerator()
-        for tile in tiles {
+        // One mirror in six, not all of them. Real ones don't all flare at once,
+        // and this is the difference between eighty animations and five hundred.
+        for tile in tiles where Double.random(in: 0...1, using: &rng) < 0.17 {
             let a = CABasicAnimation(keyPath: "opacity")
             a.fromValue = 1.0
             a.toValue = Double.random(in: 0.30...0.65, using: &rng)
@@ -171,5 +174,10 @@ enum MirrorBall3D {
 
     static func stopTwinkle(on spinner: CALayer) {
         spinner.sublayers?.forEach { $0.removeAllAnimations() }
+        spinner.setValue(nil, forKey: twinklingKey)
     }
+
+    /// Which tiles twinkle is decided at random each time, so "is the first tile
+    /// animating?" is no longer a safe way to ask whether this already ran.
+    private static let twinklingKey = "DiscoBreakTwinkling"
 }

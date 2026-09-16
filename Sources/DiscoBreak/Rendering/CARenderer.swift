@@ -41,6 +41,11 @@ final class CARenderer: DiscoRenderer {
     private var hiddenY: CGFloat = 0
     private var shownY: CGFloat = 0
 
+    /// Bumped on every drop. A retract schedules its shutdown on a timer, and a
+    /// hesitant pointer can restart the show before that timer fires — so the
+    /// timer checks that it still belongs to the show it was started for.
+    private var generation = 0
+
     init(settings: Settings, role: Role = .full) {
         self.settings = settings
         self.role = role
@@ -69,27 +74,27 @@ final class CARenderer: DiscoRenderer {
 
         let ballCentre = CGPoint(x: 0, y: -drop)
 
-        // --- chain -------------------------------------------------------
-        let chain = CAShapeLayer()
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: 0, y: 40))     // start above the pivot so it never shows a gap
-        path.addLine(to: CGPoint(x: 0, y: ballCentre.y + radius * 0.35))
-        chain.path = path
-        chain.strokeColor = NSColor(calibratedWhite: 0.72, alpha: 0.95).cgColor
-        chain.lineWidth = 2.5
-        chain.fillColor = nil
-        chain.shadowColor = NSColor.black.cgColor
-        chain.shadowOpacity = 0.45
-        chain.shadowRadius = 2
-        chain.shadowOffset = CGSize(width: 1, height: -1)
-
-        // --- light rays (starburst) --------------------------------------
-        let rays = makeRayBurst(radius: radius)
-        rays.position = ballCentre
-
+        // --- chain and starburst, notch screen only -----------------------
         if role == .full {
+            let chain = CAShapeLayer()
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 0, y: 40))   // above the pivot so it never shows a gap
+            path.addLine(to: CGPoint(x: 0, y: ballCentre.y + radius * 0.35))
+            chain.path = path
+            chain.strokeColor = NSColor(calibratedWhite: 0.72, alpha: 0.95).cgColor
+            chain.lineWidth = 2.5
+            chain.fillColor = nil
+            chain.shadowColor = NSColor.black.cgColor
+            chain.shadowOpacity = 0.45
+            chain.shadowRadius = 2
+            chain.shadowOffset = CGSize(width: 1, height: -1)
             rig.addSublayer(chain)
+            self.chain = chain
+
+            let rays = makeRayBurst(radius: radius)
+            rays.position = ballCentre
             rig.addSublayer(rays)
+            self.rays = rays
         }
 
         // --- light spots, driven by the reflection solver -----------------
@@ -103,27 +108,30 @@ final class CARenderer: DiscoRenderer {
         ballCentreOnScreen = CGPoint(x: notchCenterX, y: topY - drop)
         rig.addSublayer(spots)
 
-        // --- the ball itself ---------------------------------------------
-        let ball = settings.ballStyle == .mirror
-            ? MirrorBall3D.make(radius: radius)
-            : makeBall(radius: radius)
-        ball.position = ballCentre
-        if role == .full { rig.addSublayer(ball) }
+        // --- the ball itself, notch screen only ---------------------------
+        //
+        // Built inside the role check rather than outside it: a lights-only stage
+        // would otherwise pay for several hundred layers it never draws, on the
+        // main thread, in the moment before the drop.
+        if role == .full {
+            let ball = settings.ballStyle == .mirror
+                ? MirrorBall3D.make(radius: radius)
+                : makeBall(radius: radius)
+            ball.position = ballCentre
+            rig.addSublayer(ball)
+            self.ball = ball
+
+            switch settings.ballStyle {
+            case .classic:
+                facets = ball.sublayers?.first?.sublayers?.first(where: { $0.name == "facets" })
+            case .mirror:
+                spinner = ball.sublayers?.first(where: { $0.name == MirrorBall3D.spinnerName })
+            }
+        }
 
         hostLayer.addSublayer(rig)
-
         self.rig = rig
-        self.ball = ball
         self.spots = spots
-        self.rays = rays
-        self.chain = chain
-        guard role == .full else { return }
-        switch settings.ballStyle {
-        case .classic:
-            facets = ball.sublayers?.first?.sublayers?.first(where: { $0.name == "facets" })
-        case .mirror:
-            spinner = ball.sublayers?.first(where: { $0.name == MirrorBall3D.spinnerName })
-        }
     }
 
     func detach() {
@@ -140,6 +148,7 @@ final class CARenderer: DiscoRenderer {
     func drop() {
         guard let rig else { return }
         rig.removeAnimation(forKey: "travel")
+        generation += 1
 
         startPerpetualMotion()
 
@@ -168,11 +177,13 @@ final class CARenderer: DiscoRenderer {
     func retract(completion: @escaping () -> Void) {
         guard let rig else { completion(); return }
         rig.removeAnimation(forKey: "travel")
+        let era = generation
 
         guard role == .full else {
             fade(to: 0.0, duration: 0.40)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [weak self] in
-                self?.stopPerpetualMotion()
+                guard let self, self.generation == era else { return }
+                self.stopPerpetualMotion()
                 completion()
             }
             return
@@ -193,7 +204,8 @@ final class CARenderer: DiscoRenderer {
         fade(to: 0.0, duration: 0.40)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.46) { [weak self] in
-            self?.stopPerpetualMotion()
+            guard let self, self.generation == era else { return }
+            self.stopPerpetualMotion()
             completion()
         }
     }
@@ -215,6 +227,7 @@ final class CARenderer: DiscoRenderer {
     private func startPerpetualMotion() {
         scrollFacets()
         turnBall()
+        if let spinner { MirrorBall3D.startTwinkle(on: spinner) }
         startSolverLoop()
         spin(rays, seconds: settings.rotationSeconds, clockwise: false, key: "orbit")
 
@@ -310,9 +323,7 @@ final class CARenderer: DiscoRenderer {
     /// render server. `beginTime` is pinned to the same shared clock the solver
     /// reads, so the sphere you can see and the light it throws agree on where it is.
     private func turnBall() {
-        guard let spinner else { return }
-        MirrorBall3D.startTwinkle(on: spinner)
-        guard spinner.animation(forKey: "turn") == nil else { return }
+        guard let spinner, spinner.animation(forKey: "turn") == nil else { return }
 
         let period = max(1.0, settings.rotationSeconds)
         let a = CABasicAnimation(keyPath: "transform.rotation.y")
