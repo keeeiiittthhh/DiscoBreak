@@ -63,7 +63,7 @@ final class SpotifyMusicSource {
     func start() {
         guard let uri = playlistURI else { return }
         queue.async { [weak self] in
-            guard let self else { return }
+            guard let self, Self.wakeQuietly() else { return }
             self.rememberCurrentPlayback()
 
             // Straight in at full volume. There is no local stinger to hand over
@@ -141,16 +141,53 @@ final class SpotifyMusicSource {
         DispatchQueue.main.async { [weak self] in self?.nowPlaying = text.isEmpty ? nil : text }
     }
 
+    // MARK: - Staying out of sight
+    //
+    // The whole gag is that nothing happens except a ball dropping. A window
+    // appearing, or Spotify jumping to the front, breaks it — so every route into
+    // Spotify here is a quiet one.
+
+    private static let bundleID = "com.spotify.client"
+
+    /// `tell application "Spotify"` starts Spotify if it isn't running, and a cold
+    /// launch puts its window in front: exactly the "something opened" moment this
+    /// is meant to avoid. So when it isn't running, start it hidden and wait —
+    /// this runs on a background queue, so blocking here costs nothing on screen.
+    private static func wakeQuietly() -> Bool {
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
+            return true
+        }
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            NSLog("DiscoBreak spotify: not installed — running silent")
+            return false
+        }
+        let ready = DispatchSemaphore(value: 0)
+        NSWorkspace.shared.openApplication(at: app, configuration: quietly()) { _, _ in
+            ready.signal()
+        }
+        guard ready.wait(timeout: .now() + 8) == .success else { return false }
+        // The process exists a beat before it will answer Apple events.
+        Thread.sleep(forTimeInterval: 1.2)
+        return true
+    }
+
     /// Hands the URI to Spotify itself rather than to whatever app happens to own
     /// the `spotify:` scheme. On a Mac where that is the browser, the default
     /// handler opens the web player, which then takes playback off the desktop app
-    /// — the playlist stops rather than starts.
+    /// — the playlist stops rather than starts, in a window nobody asked for.
     private static func openInSpotify(_ uri: String) {
         guard let url = URL(string: uri),
-              let app = NSWorkspace.shared
-                .urlForApplication(withBundleIdentifier: "com.spotify.client") else { return }
-        NSWorkspace.shared.open([url], withApplicationAt: app,
-                                configuration: NSWorkspace.OpenConfiguration())
+              let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+        else { return }
+        NSWorkspace.shared.open([url], withApplicationAt: app, configuration: quietly())
+    }
+
+    private static func quietly() -> NSWorkspace.OpenConfiguration {
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = false        // don't come to the front
+        config.hides = true             // and don't show a window on first launch
+        config.addsToRecentItems = false
+        return config
     }
 
     // MARK: - AppleScript
