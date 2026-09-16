@@ -61,7 +61,10 @@ final class SpotifyMusicSource {
     // MARK: - MusicSource
 
     func start() {
-        guard let uri = playlistURI else { return }
+        guard let uri = playlistURI else {
+            NSLog("DiscoBreak spotify: no playlist set — running silent")
+            return
+        }
         queue.async { [weak self] in
             guard let self, Self.wakeQuietly() else { return }
             self.rememberCurrentPlayback()
@@ -78,6 +81,7 @@ final class SpotifyMusicSource {
             // ever stops working, handing the URI to Spotify and hitting play does
             // the same job.
             if !Self.perform("tell application \"Spotify\" to play track \"\(uri)\"") {
+                NSLog("DiscoBreak spotify: play track refused — handing the link over instead")
                 Self.openInSpotify(uri)
                 Thread.sleep(forTimeInterval: 0.6)
                 Self.perform("tell application \"Spotify\" to play")
