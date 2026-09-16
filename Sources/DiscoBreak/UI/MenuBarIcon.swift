@@ -6,7 +6,26 @@ import AppKit
 /// MVP's 🪩 was effectively invisible.
 enum MenuBarIcon {
 
-    static func make(size: CGFloat = 17) -> NSImage {
+    /// The shipped glyph, designed in Figma and exported as SVG. `NSImage` renders
+    /// SVG as a vector rep, so it stays crisp at any menu bar size and on any display.
+    static func make(size: CGFloat = 18) -> NSImage {
+        if let image = artwork(size: size) { return image }
+        NSLog("DiscoBreak: menubar-icon.svg missing — using the drawn fallback glyph")
+        return drawn(size: size)
+    }
+
+    private static func artwork(size: CGFloat) -> NSImage? {
+        let url = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Resources/menubar-icon.svg")
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        image.size = NSSize(width: size, height: size)
+        image.isTemplate = true          // macOS tints it: dark on light bars, light on dark
+        return image
+    }
+
+    /// Kept so an unbundled `swift run`, or a bad copy of the app, still shows
+    /// something clickable rather than an invisible status item.
+    private static func drawn(size: CGFloat) -> NSImage {
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             let inset: CGFloat = 1.5
             let circle = rect.insetBy(dx: inset, dy: inset)

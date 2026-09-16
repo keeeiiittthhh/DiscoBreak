@@ -89,7 +89,9 @@ swift build
 ```
 
 Swift Package Manager, no `.xcodeproj`. macOS 14+. AppKit and Core Animation
-only — no Metal, no shaders, no assets beyond the icon and the loop.
+only — no Metal, no shaders. Three assets: the app icon, the audio loop, and
+the menu bar glyph (`Resources/menubar-icon.svg`, drawn in Figma and loaded as
+a template image so macOS tints it to match the menu bar).
 
 To sign and notarize a real release:
 
