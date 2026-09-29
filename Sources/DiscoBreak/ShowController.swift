@@ -100,7 +100,9 @@ final class ShowController {
 
         for screen in screens {
             let isPrimary = screen == notchScreen
-            let renderer = CARenderer(settings: settings, role: isPrimary ? .full : .lightsOnly)
+            let renderer: DiscoRenderer = settings.hyperrealBall
+                ? HyperrealBall(settings: settings, carriesBall: isPrimary)
+                : CARenderer(settings: settings, role: isPrimary ? .full : .lightsOnly)
             let window = OverlayWindow(screen: screen)
 
             // On the notch screen the light source is the notch. Elsewhere it hangs

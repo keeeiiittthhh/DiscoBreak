@@ -30,6 +30,7 @@ STAGE="$ROOT/build/dmg"
 if [[ -n "${DEVELOPER_ID:-}" ]]; then
   echo "Signing with: $DEVELOPER_ID"
   codesign --force --options runtime --timestamp \
+           --entitlements "$ROOT/DiscoBreak.entitlements" \
            --sign "$DEVELOPER_ID" "$APP"
   codesign --verify --strict --verbose=2 "$APP"
 else

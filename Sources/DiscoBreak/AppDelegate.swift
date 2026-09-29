@@ -186,14 +186,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pause.tag = 2
         menu.addItem(.separator())
 
-        // Two balls, one click apart. The checkmark shows which is hanging.
+        // Three balls, one click apart. The checkmark shows which is hanging.
         let ball = NSMenuItem(title: "Ball", action: nil, keyEquivalent: "")
         let ballMenu = NSMenu()
-        for style in BallStyle.allCases {
-            let item = NSMenuItem(title: style.rawValue, action: #selector(chooseBall(_:)),
+        for choice in BallChoice.allCases {
+            let item = NSMenuItem(title: choice.rawValue, action: #selector(chooseBall(_:)),
                                   keyEquivalent: "")
             item.target = self
-            item.representedObject = style.rawValue
+            item.representedObject = choice.rawValue
             ballMenu.addItem(item)
         }
         ball.submenu = ballMenu
@@ -230,9 +230,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func chooseBall(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String,
-              let style = BallStyle(rawValue: raw),
-              style != store.settings.ballStyle else { return }
-        store.settings.ballStyle = style      // saves, and rebuilds the show
+              let choice = BallChoice(rawValue: raw),
+              choice != store.settings.ballChoice else { return }
+        store.settings.ballChoice = choice    // saves, and rebuilds the show
     }
 
     @objc private func openSettings() {
@@ -248,7 +248,7 @@ extension AppDelegate: NSMenuDelegate {
         menu.item(withTag: 1)?.title = show.nowPlaying.map { "♫  \($0)" } ?? "Hover the notch to start"
         menu.item(withTag: 2)?.title = isPaused ? "Resume DiscoBreak" : "Pause DiscoBreak"
         for item in menu.item(withTag: 3)?.submenu?.items ?? [] {
-            item.state = item.representedObject as? String == store.settings.ballStyle.rawValue
+            item.state = item.representedObject as? String == store.settings.ballChoice.rawValue
                 ? .on : .off
         }
     }

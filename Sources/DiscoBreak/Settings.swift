@@ -10,12 +10,45 @@ enum BallStyle: String, Codable, CaseIterable {
     case mirror = "Mirror tiles"
 }
 
+/// What hangs on the chain, as the picker and the menu offer it.
+///
+/// The third ball is a renderer of its own rather than a third `BallStyle`: that
+/// way `CARenderer`, which switches between the first two, never has to learn
+/// about it, and the first two stay exactly as they were.
+enum BallChoice: String, CaseIterable {
+    case classic = "Classic"
+    case mirror = "Mirror tiles"
+    case hyperreal = "Hyperreal"
+}
+
+extension Settings {
+    var ballChoice: BallChoice {
+        get { hyperrealBall ? .hyperreal : (ballStyle == .mirror ? .mirror : .classic) }
+        set {
+            hyperrealBall = newValue == .hyperreal
+            // Choosing the third ball leaves the remembered style alone, so
+            // switching back lands on whichever of the other two was last used.
+            switch newValue {
+            case .classic:   ballStyle = .classic
+            case .mirror:    ballStyle = .mirror
+            case .hyperreal: break
+            }
+        }
+    }
+}
+
 /// Tunables. Defaults are baked in; drop a JSON file at
 /// ~/Library/Application Support/DiscoBreak/settings.json to override any subset.
 struct Settings: Codable {
 
     // Geometry
     var ballStyle: BallStyle = .mirror
+    /// The GPU ball. Overrides `ballStyle` while it is on.
+    var hyperrealBall: Bool = false
+    /// Opt-in: the GPU ball's mirrors reflect the camera instead of a studio.
+    var ballCamera: Bool = false
+    /// How much the GPU ball darkens the screen while it's down, 0...0.85, so the light reads.
+    var dimBackground: Double = 0.45
     var ballDiameter: CGFloat = 116
     var dropDistance: CGFloat = 230      // ball centre, in points below the notch
 
@@ -60,6 +93,9 @@ struct Settings: Codable {
             (try? c.decodeIfPresent(T.self, forKey: key)) .flatMap { $0 } ?? fallback
         }
         ballStyle         = v(.ballStyle,         d.ballStyle)
+        hyperrealBall     = v(.hyperrealBall,     d.hyperrealBall)
+        ballCamera        = v(.ballCamera,        d.ballCamera)
+        dimBackground     = v(.dimBackground,     d.dimBackground)
         ballDiameter      = v(.ballDiameter,      d.ballDiameter)
         dropDistance      = v(.dropDistance,      d.dropDistance)
         rotationSeconds   = v(.rotationSeconds,   d.rotationSeconds)

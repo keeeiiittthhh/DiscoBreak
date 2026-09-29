@@ -12,7 +12,7 @@ struct SettingsView: View {
             MusicTab(store: store).tabItem { Label("Music", systemImage: "music.note") }
             BehaviourTab(store: store).tabItem { Label("Behaviour", systemImage: "gearshape") }
         }
-        .frame(width: 460, height: 340)
+        .frame(width: 460, height: 400)
         .overlay(alignment: .bottom) {
             Button("Test Drop", action: onTestDrop)
                 .padding(.bottom, 10)
@@ -48,14 +48,26 @@ private struct LookTab: View {
     @ObservedObject var store: SettingsStore
     var body: some View {
         Form {
-            Picker("Ball", selection: $store.settings.ballStyle) {
-                ForEach(BallStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            Picker("Ball", selection: $store.settings.ballChoice) {
+                ForEach(BallChoice.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
-            Text(store.settings.ballStyle == .mirror
-                 ? "Several hundred real mirrors on a sphere, turning in 3D."
-                 : "A painted disc with a facet grid scrolling across it. Cheaper.")
-                .font(.caption).foregroundStyle(.secondary)
+            Text(ballNote).font(.caption).foregroundStyle(.secondary)
+
+            if store.settings.ballChoice == .hyperreal {
+                Toggle("Reflect the room", isOn: Binding(
+                    get: { store.settings.ballCamera },
+                    set: { on in
+                        guard on else { store.settings.ballCamera = false; return }
+                        // Ask here, where the reason is on screen, not mid-show.
+                        CameraReflection.requestAccess { store.settings.ballCamera = $0 }
+                    }))
+                Text(cameraNote).font(.caption).foregroundStyle(.secondary)
+                Row("Dim screen", detail: "Darkens everything behind the ball so the light stands out.") {
+                    Slider(value: $store.settings.dimBackground, in: 0...0.85)
+                    Text("\(Int(store.settings.dimBackground * 100))%").monospacedDigit().frame(width: 46)
+                }
+            }
 
             Row("Ball size") {
                 Slider(value: $store.settings.ballDiameter, in: 60...260)
@@ -80,6 +92,24 @@ private struct LookTab: View {
             }
         }
         .padding(20)
+    }
+
+    private var ballNote: String {
+        switch store.settings.ballChoice {
+        case .classic:   return "A painted disc with a facet grid scrolling across it. Cheapest."
+        case .mirror:    return "Several hundred real mirrors on a sphere, turning in 3D."
+        case .hyperreal: return "A thousand mirrors drawn on the graphics chip, throwing soft specks of light. Bigger and lower than the other two."
+        }
+    }
+
+    private var cameraNote: String {
+        if !CameraReflection.isAvailable {
+            return "No camera found, so the mirrors reflect soft studio lights instead."
+        }
+        if CameraReflection.isDenied {
+            return "Camera access is off for DiscoBreak. Turn it on in System Settings → Privacy & Security → Camera. Until then the mirrors reflect studio lights."
+        }
+        return "The mirrors show your room and you. The camera runs only while the ball is down, and nothing is recorded or saved."
     }
 }
 
